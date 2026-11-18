@@ -17,3 +17,28 @@ class PomoState(BaseModel):
     phase: Literal["work", "short_break", "long_break"]
     remaining_sec: int
     end_time: float | None = None
+    is_running: bool = False
+
+
+phase_to_emoji_dict: dict[str, str] = {
+    "work": "▶",
+    "short_break": "☕",
+    "long_break": "🍽️",
+}
+
+
+def phase_to_emoji(phase: str) -> str:
+    return phase_to_emoji_dict.get(phase, "⏱️")
+
+
+def get_waybar_print(
+    state: PomoState,
+    config: PomoConfig,
+    mins: int,
+    secs: int,
+) -> str:
+    if not state:
+        emoji: str = "⏸"
+    else:
+        emoji: str = phase_to_emoji(state.phase)
+    return f"{state.current_cycle}/{config.total_cycles} {mins:02d}:{secs:02d} {emoji}"

@@ -1,8 +1,13 @@
+import sys
 from pathlib import Path
 
 from pydantic import BaseModel
 
-from waypomo.schemas.config_schema import PomoConfig, PomoState
+from waypomo.schemas.config_schema import (
+    PomoConfig,
+    PomoState,
+    get_waybar_print,
+)
 
 home_dir: Path = Path.home()
 
@@ -30,7 +35,24 @@ if not state_file.exists():
     config: PomoConfig = load_json_into_model(json_path=config_file, model=PomoConfig)
 
     state = PomoState(
-        config=config, current_cycle=1, phase="work", remaining_sec=config.work_min * 60
+        config=config,
+        current_cycle=1,
+        phase="work",
+        remaining_sec=config.work_min * 60,
+        is_running=False,
     )
 
     save_model_to_json(json_path=state_file, model=state)
+
+    mins, secs = divmod(state.remaining_sec, 60)
+
+    print(
+        get_waybar_print(
+            config=config,
+            state=state,
+            mins=mins,
+            secs=secs,
+        )
+    )
+
+    sys.exit(0)
