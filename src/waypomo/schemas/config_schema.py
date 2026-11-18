@@ -1,3 +1,4 @@
+import json
 from typing import Literal
 
 from pydantic import BaseModel
@@ -42,4 +43,10 @@ def get_waybar_print(
 
     mins, secs = divmod(state.remaining_sec, 60)
 
-    return f"{state.current_cycle}/{config.total_cycles} {mins:02d}:{secs:02d} {emoji}"
+    return json.dumps(
+        {
+            "text": f"{mins:02d}:{secs:02d} {phase_to_emoji(state.phase)}",
+            "tooltip": f"Cycle: {state.current_cycle}/{config.total_cycles}\nPhase: {state.phase}",
+        },
+        ensure_ascii=False,
+    )
