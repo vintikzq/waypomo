@@ -34,11 +34,12 @@ def phase_to_emoji(phase: str) -> str:
 def get_waybar_print(
     state: PomoState,
     config: PomoConfig,
-    mins: int,
-    secs: int,
 ) -> str:
     if not state:
         emoji: str = "⏸"
     else:
         emoji: str = phase_to_emoji(state.phase)
+
+    mins, secs = divmod(state.remaining_sec, 60)
+
     return f"{state.current_cycle}/{config.total_cycles} {mins:02d}:{secs:02d} {emoji}"
