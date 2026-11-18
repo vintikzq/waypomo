@@ -31,21 +31,7 @@ def load_json_into_model(json_path: Path, model):
 cmd: str = sys.argv[1] if len(sys.argv) > 1 else "tick"
 
 
-if cmd == "toggle":
-    state: PomoState = load_json_into_model(json_path=state_file, model=PomoState)
-
-    state.is_running = not state.is_running
-
-    if state.is_running:
-        state.end_time = time.time() + state.remaining_sec
-    else:
-        state.end_time = None
-
-    save_model_to_json(json_path=state_file, model=state)
-
-    sys.exit(0)
-
-elif cmd == "tick":
+def get_or_create_state() -> PomoState:
     if not state_file.exists():
         if not config_file.exists():
             default_config = PomoConfig()
@@ -64,65 +50,29 @@ elif cmd == "tick":
         )
 
         save_model_to_json(json_path=state_file, model=state)
+        return state
 
-        print(
-            get_waybar_print(
-                config=config,
-                state=state,
-            )
-        )
+    return load_json_into_model(json_path=state_file, model=PomoState)
 
-        sys.exit(0)
 
-    state: PomoState = load_json_into_model(json_path=state_file, model=PomoState)
+state: PomoState = get_or_create_state()
 
-    if not state.is_running:
-        print(
-            get_waybar_print(
-                config=state.config,
-                state=state,
-            )
-        )
-        sys.exit(0)
+match cmd:
+    case "toggle":
+        state.is_running = not state.is_running
 
-    if state.is_running and state.end_time:
-        state.remaining_sec = max(0, int(state.end_time - time.time()))
-        try:
-            if state.current_cycle == state.config.total_cycles:
-                state.current_cycle = 1
-                config: PomoConfig = load_json_into_model(
-                    json_path=config_file, model=PomoConfig
-                )
-                state.config = config
-                state.is_running = False
-                state.end_time = None
-                state.phase = "work"
-                state.remaining_sec = state.config.work_min * 60
+        if state.is_running:
+            state.end_time = time.time() + state.remaining_sec
+        else:
+            state.end_time = None
 
-            elif (
-                state.remaining_sec == 0
-                and state.phase == "work"
-                and state.current_cycle == state.config.cycles_before_long
-            ):
-                state.phase = "long_break"
-                state.remaining_sec = state.config.long_break_min * 60
-                state.end_time = time.time() + state.remaining_sec
-
-            elif state.remaining_sec == 0 and (
-                state.phase == "long_break" or state.phase == "short_break"
-            ):
-                state.phase = "work"
-                state.remaining_sec = state.config.work_min * 60
-                state.current_cycle += 1
-                state.end_time = time.time() + state.remaining_sec
-
-            elif state.remaining_sec == 0 and state.phase == "work":
-                state.phase = "short_break"
-                state.remaining_sec = state.config.short_break_min * 60
-                state.end_time = time.time() + state.remaining_sec
-
-        finally:
-            save_model_to_json(json_path=state_file, model=state)
+        save_model_to_json(json_path=state_file, model=state)
+    case "next":
+        pass
+    case "reset":
+        pass
+    case _:
+        if not state.is_running:
             print(
                 get_waybar_print(
                     config=state.config,
@@ -130,7 +80,42 @@ elif cmd == "tick":
                 )
             )
             sys.exit(0)
+        elif state.is_running and state.end_time:
+            state.remaining_sec = max(0, int(state.end_time - time.time()))
+        if state.remaining_sec == 0:
+            match state.phase:
+                case "work" if state.current_cycle == state.config.total_cycles:
+                    state.current_cycle = 1
+                    config: PomoConfig = load_json_into_model(
+                        json_path=config_file, model=PomoConfig
+                    )
+                    state.config = config
+                    state.is_running = False
+                    state.end_time = None
+                    state.phase = "work"
+                    state.remaining_sec = state.config.work_min * 60
+                case "work" if (
+                    state.current_cycle % state.config.cycles_before_long == 0
+                ):
+                    state.phase = "long_break"
+                    state.remaining_sec = state.config.long_break_min * 60
+                    state.end_time = time.time() + state.remaining_sec
+                case "work":
+                    state.phase = "short_break"
+                    state.remaining_sec = state.config.short_break_min * 60
+                    state.end_time = time.time() + state.remaining_sec
+                case "long_break" | "short_break":
+                    state.phase = "work"
+                    state.remaining_sec = state.config.work_min * 60
+                    state.current_cycle += 1
+                    state.end_time = time.time() + state.remaining_sec
 
 
-else:
-    pass
+save_model_to_json(json_path=state_file, model=state)
+print(
+    get_waybar_print(
+        config=state.config,
+        state=state,
+    )
+)
+sys.exit(0)
