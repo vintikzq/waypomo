@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -57,6 +58,53 @@ def get_or_create_state() -> PomoState:
 
 state: PomoState = get_or_create_state()
 
+
+def advance_phase(phase, state: PomoState) -> PomoState:
+    phase_minutes: dict[str, int] = {
+        "work": state.config.work_min,
+        "short_break": state.config.short_break_min,
+        "long_break": state.config.long_break_min,
+    }
+    state.phase = phase
+    state.remaining_sec = phase_minutes[phase] * 60
+    state.end_time = time.time() + state.remaining_sec if state.is_running else None
+    return state
+
+
+def step_to_next_phase(state: PomoState) -> PomoState:
+    match state.phase:
+        case "work" if state.current_cycle == state.config.total_cycles:
+            state_file.unlink(missing_ok=True)
+        case "work" if state.current_cycle % state.config.cycles_before_long == 0:
+            state = advance_phase("long_break", state=state)
+        case "work":
+            state = advance_phase("short_break", state=state)
+        case "long_break" | "short_break":
+            state = advance_phase("work", state=state)
+            state.current_cycle += 1
+
+    return state
+
+
+def send_notification(phase: str):
+    phase_pharases = {
+        "work": "It's time to work!",
+        "short_break": "Short break started. Rest your eyes for a few minutes.",
+        "long_break": "Long break started. Time to recharge!",
+    }
+
+    subprocess.run(
+        [
+            "notify-send",
+            "-u",
+            "normal",
+            "Waypomo",
+            f"{phase_pharases[phase]}",
+        ],
+        check=False,
+    )
+
+
 match cmd:
     case "toggle":
         state.is_running = not state.is_running
@@ -68,9 +116,10 @@ match cmd:
 
         save_model_to_json(json_path=state_file, model=state)
     case "next":
-        pass
+        state = step_to_next_phase(state)
     case "reset":
-        pass
+        state_file.unlink(missing_ok=True)
+        state = get_or_create_state()
     case _:
         if not state.is_running:
             print(
@@ -83,32 +132,8 @@ match cmd:
         elif state.is_running and state.end_time:
             state.remaining_sec = max(0, int(state.end_time - time.time()))
         if state.remaining_sec == 0:
-            match state.phase:
-                case "work" if state.current_cycle == state.config.total_cycles:
-                    state.current_cycle = 1
-                    config: PomoConfig = load_json_into_model(
-                        json_path=config_file, model=PomoConfig
-                    )
-                    state.config = config
-                    state.is_running = False
-                    state.end_time = None
-                    state.phase = "work"
-                    state.remaining_sec = state.config.work_min * 60
-                case "work" if (
-                    state.current_cycle % state.config.cycles_before_long == 0
-                ):
-                    state.phase = "long_break"
-                    state.remaining_sec = state.config.long_break_min * 60
-                    state.end_time = time.time() + state.remaining_sec
-                case "work":
-                    state.phase = "short_break"
-                    state.remaining_sec = state.config.short_break_min * 60
-                    state.end_time = time.time() + state.remaining_sec
-                case "long_break" | "short_break":
-                    state.phase = "work"
-                    state.remaining_sec = state.config.work_min * 60
-                    state.current_cycle += 1
-                    state.end_time = time.time() + state.remaining_sec
+            state = step_to_next_phase(state)
+            send_notification(state.phase)
 
 
 save_model_to_json(json_path=state_file, model=state)
