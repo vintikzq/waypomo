@@ -1,5 +1,7 @@
+import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import NoReturn
@@ -22,7 +24,15 @@ def main() -> NoReturn:
 
     def save_json(json_path: Path, data: PomoConfig | PomoState) -> None:
         json_path.parent.mkdir(parents=True, exist_ok=True)
-        json_path.write_text(data.to_json(), encoding="utf-8")
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=json_path.parent,
+            delete=False,
+        ) as tmp_file:
+            tmp_file.write(data.to_json())
+            tmp_name = tmp_file.name
+        os.replace(tmp_name, json_path)
 
     def load_json[T: PomoConfig | PomoState](json_path: Path, cls: type[T]) -> T:
         raw = json_path.read_text(encoding="utf-8")
