@@ -4,8 +4,6 @@ import time
 from pathlib import Path
 from typing import NoReturn
 
-from pydantic import BaseModel
-
 from waypomo.schemas.config_schema import (
     PomoConfig,
     PomoState,
@@ -22,12 +20,13 @@ def main() -> NoReturn:
     config_file: Path = config_dir / "config.json"
     state_file: Path = state_dir / "state.json"
 
-    def save_model_to_json(json_path: Path, model: BaseModel) -> None:
+    def save_json(json_path: Path, data: PomoConfig | PomoState) -> None:
         json_path.parent.mkdir(parents=True, exist_ok=True)
-        json_path.write_text(model.model_dump_json(indent=2), encoding="utf-8")
+        json_path.write_text(data.to_json(), encoding="utf-8")
 
-    def load_json_into_model(json_path: Path, model):
-        return model.model_validate_json(json_path.read_text(encoding="utf-8"))
+    def load_json[T: PomoConfig | PomoState](json_path: Path, cls: type[T]) -> T:
+        raw = json_path.read_text(encoding="utf-8")
+        return cls.from_json(raw)
 
     cmd: str = sys.argv[1] if len(sys.argv) > 1 else "tick"
 
@@ -35,11 +34,9 @@ def main() -> NoReturn:
         if not state_file.exists():
             if not config_file.exists():
                 default_config = PomoConfig()
-                save_model_to_json(json_path=config_file, model=default_config)
+                save_json(json_path=config_file, data=default_config)
 
-            config: PomoConfig = load_json_into_model(
-                json_path=config_file, model=PomoConfig
-            )
+            config: PomoConfig = load_json(json_path=config_file, cls=PomoConfig)
 
             state = PomoState(
                 config=config,
@@ -49,10 +46,10 @@ def main() -> NoReturn:
                 is_running=False,
             )
 
-            save_model_to_json(json_path=state_file, model=state)
+            save_json(json_path=state_file, data=state)
             return state
 
-        return load_json_into_model(json_path=state_file, model=PomoState)
+        return load_json(json_path=state_file, cls=PomoState)
 
     state: PomoState = get_or_create_state()
 
@@ -109,7 +106,7 @@ def main() -> NoReturn:
             else:
                 state.end_time = None
 
-            save_model_to_json(json_path=state_file, model=state)
+            save_json(json_path=state_file, data=state)
         case "next":
             state = step_to_next_phase(state)
         case "reset":
@@ -130,7 +127,7 @@ def main() -> NoReturn:
                 state = step_to_next_phase(state)
                 send_notification(state.phase)
 
-    save_model_to_json(json_path=state_file, model=state)
+    save_json(json_path=state_file, data=state)
     print(
         get_waybar_print(
             config=state.config,

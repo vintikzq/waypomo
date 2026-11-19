@@ -1,10 +1,21 @@
 import json
-from typing import Literal
+from dataclasses import asdict, dataclass, is_dataclass
+from typing import Literal, Self
 
-from pydantic import BaseModel
+
+class JsonMixin:
+    def to_json(self) -> str:
+        if not is_dataclass(self):
+            raise TypeError("JsonMixin can only be used with dataclasses")
+        return json.dumps(asdict(self))
+
+    @classmethod
+    def from_json(cls, raw: str) -> Self:
+        return cls(**json.loads(raw))
 
 
-class PomoConfig(BaseModel):
+@dataclass
+class PomoConfig(JsonMixin):
     work_min: int = 45
     short_break_min: int = 15
     long_break_min: int = 60
@@ -12,13 +23,18 @@ class PomoConfig(BaseModel):
     total_cycles: int = 7
 
 
-class PomoState(BaseModel):
+@dataclass
+class PomoState(JsonMixin):
     config: PomoConfig
     current_cycle: int
     phase: Literal["work", "short_break", "long_break"]
     remaining_sec: int
     end_time: float | None = None
     is_running: bool = False
+
+    def __post_init__(self) -> None:
+        if isinstance(self.config, dict):
+            self.config = PomoConfig(**self.config)
 
 
 phase_to_emoji_dict: dict[str, str] = {
@@ -36,16 +52,16 @@ def get_waybar_print(
     state: PomoState,
     config: PomoConfig,
 ) -> str:
-    if not state:
-        emoji: str = "⏸"
+    if not state.is_running:
+        emoji = "⏸"
     else:
-        emoji: str = phase_to_emoji(state.phase)
+        emoji = phase_to_emoji(state.phase)
 
     mins, secs = divmod(state.remaining_sec, 60)
 
     return json.dumps(
         {
-            "text": f"{mins:02d}:{secs:02d} {phase_to_emoji(state.phase)}",
+            "text": f"{mins:02d}:{secs:02d} {emoji}",
             "tooltip": f"Cycle: {state.current_cycle}/{config.total_cycles}\nPhase: {state.phase}",
         },
         ensure_ascii=False,
