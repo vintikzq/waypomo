@@ -12,7 +12,7 @@ A simple and lightweight Pomodoro timer for Waybar written in Python. It syncs d
 ## Installation
 
 ```bash
-git clone https://github.com
+git clone https://github.com/vintikzq/waypomo.git
 cd waypomo
 uv tool install .
 ```
